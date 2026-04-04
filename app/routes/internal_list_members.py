@@ -4,7 +4,12 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 from psycopg.errors import UniqueViolation
 
 from app.db import get_connection
-from app.schemas import ListMemberResponse, ShareListRequest, ShareListResponse
+from app.schemas import (
+    ListMemberResponse,
+    ListRecipientResponse,
+    ShareListRequest,
+    ShareListResponse,
+)
 
 router = APIRouter(prefix="/internal/list-members", tags=["internal-list-members"])
 
@@ -121,3 +126,33 @@ def get_list_members(
             rows = cursor.fetchall()
 
     return [ListMemberResponse.model_validate(row) for row in rows]
+
+
+@router.get("/by-list/{list_id}/recipients", response_model=list[ListRecipientResponse])
+def get_list_recipients(list_id: UUID = Path(...)) -> list[ListRecipientResponse]:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT u.id AS user_id, u.email, 'owner' AS role
+                FROM lists l
+                JOIN users u ON u.id = l.owner_id
+                WHERE l.id = %s
+                UNION ALL
+                SELECT u.id AS user_id, u.email, lm.role
+                FROM list_members lm
+                JOIN users u ON u.id = lm.user_id
+                WHERE lm.list_id = %s
+                ORDER BY email ASC
+                """,
+                (str(list_id), str(list_id)),
+            )
+            rows = cursor.fetchall()
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="List not found",
+        )
+
+    return [ListRecipientResponse.model_validate(row) for row in rows]

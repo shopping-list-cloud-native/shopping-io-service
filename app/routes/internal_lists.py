@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.db import get_connection
 from app.schemas import (
+    BudgetListResponse,
     CreateListRequest,
     DeleteListRequest,
     DeleteListResponse,
@@ -36,6 +37,29 @@ def create_list(payload: CreateListRequest) -> ListResponse:
         )
 
     return ListResponse.model_validate(row)
+
+
+@router.get("/{list_id}", response_model=BudgetListResponse)
+def get_list(list_id: UUID = Path(...)) -> BudgetListResponse:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, owner_id, name, max_budget, created_at
+                FROM lists
+                WHERE id = %s
+                """,
+                (str(list_id),),
+            )
+            row = cursor.fetchone()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="List not found",
+        )
+
+    return BudgetListResponse.model_validate(row)
 
 
 @router.get("", response_model=list[ListResponse])
