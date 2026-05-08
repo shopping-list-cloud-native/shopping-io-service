@@ -19,6 +19,20 @@ def create_item(payload: CreateItemRequest) -> ItemResponse:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
+                SELECT id FROM items
+                WHERE list_id = %s AND LOWER(name) = LOWER(%s)
+                """,
+                (str(payload.list_id), payload.name),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Item with this name already exists in this list",
+                )
+
+            cursor.execute(
+                """
                 INSERT INTO items (list_id, name, quantity, estimated_price)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, list_id, name, quantity, estimated_price, checked, created_at, updated_at
@@ -75,6 +89,21 @@ def update_item(payload: UpdateItemRequest, item_id: UUID = Path(...)) -> ItemRe
 
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            if payload.name is not None:
+                cursor.execute(
+                    """
+                    SELECT id FROM items
+                    WHERE list_id = %s AND LOWER(name) = LOWER(%s) AND id != %s
+                    """,
+                    (str(payload.list_id), payload.name, str(item_id)),
+                )
+                existing = cursor.fetchone()
+                if existing is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Item with this name already exists in this list",
+                    )
+
             cursor.execute(
                 """
                 UPDATE items

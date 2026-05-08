@@ -21,6 +21,20 @@ def create_list(payload: CreateListRequest) -> ListResponse:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
+                SELECT id FROM lists
+                WHERE owner_id = %s AND LOWER(name) = LOWER(%s)
+                """,
+                (str(payload.owner_id), payload.name),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="List with this name already exists",
+                )
+
+            cursor.execute(
+                """
                 INSERT INTO lists (owner_id, name, max_budget)
                 VALUES (%s, %s, %s)
                 RETURNING id, owner_id, name, max_budget, created_at
@@ -93,6 +107,21 @@ def update_list(
 
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            if payload.name is not None:
+                cursor.execute(
+                    """
+                    SELECT id FROM lists
+                    WHERE owner_id = %s AND LOWER(name) = LOWER(%s) AND id != %s
+                    """,
+                    (str(payload.owner_id), payload.name, str(list_id)),
+                )
+                existing = cursor.fetchone()
+                if existing is not None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="List with this name already exists",
+                    )
+
             cursor.execute(
                 """
                 UPDATE lists
