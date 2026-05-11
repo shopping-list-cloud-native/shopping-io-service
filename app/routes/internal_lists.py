@@ -53,6 +53,43 @@ def create_list(payload: CreateListRequest) -> ListResponse:
     return ListResponse.model_validate(row)
 
 
+@router.get("", response_model=list[ListResponse])
+def get_lists_by_owner(owner_id: UUID = Query(...)) -> list[ListResponse]:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, owner_id, name, max_budget, created_at
+                FROM lists
+                WHERE owner_id = %s
+                ORDER BY created_at DESC
+                """,
+                (str(owner_id),),
+            )
+            rows = cursor.fetchall()
+
+    return [ListResponse.model_validate(row) for row in rows]
+
+
+@router.get("/accessible", response_model=list[ListResponse])
+def get_accessible_lists(user_id: UUID = Query(...)) -> list[ListResponse]:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT DISTINCT l.id, l.owner_id, l.name, l.max_budget, l.created_at
+                FROM lists l
+                LEFT JOIN list_members lm ON lm.list_id = l.id
+                WHERE l.owner_id = %s OR lm.user_id = %s
+                ORDER BY created_at DESC
+                """,
+                (str(user_id), str(user_id)),
+            )
+            rows = cursor.fetchall()
+
+    return [ListResponse.model_validate(row) for row in rows]
+
+
 @router.get("/{list_id}", response_model=BudgetListResponse)
 def get_list(list_id: UUID = Path(...)) -> BudgetListResponse:
     with get_connection() as connection:
@@ -74,24 +111,6 @@ def get_list(list_id: UUID = Path(...)) -> BudgetListResponse:
         )
 
     return BudgetListResponse.model_validate(row)
-
-
-@router.get("", response_model=list[ListResponse])
-def get_lists_by_owner(owner_id: UUID = Query(...)) -> list[ListResponse]:
-    with get_connection() as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT id, owner_id, name, max_budget, created_at
-                FROM lists
-                WHERE owner_id = %s
-                ORDER BY created_at DESC
-                """,
-                (str(owner_id),),
-            )
-            rows = cursor.fetchall()
-
-    return [ListResponse.model_validate(row) for row in rows]
 
 
 @router.patch("/{list_id}", response_model=ListResponse)

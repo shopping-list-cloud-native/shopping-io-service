@@ -48,3 +48,28 @@ def get_notifications(user_id: UUID = Query(...)) -> list[NotificationResponse]:
             rows = cursor.fetchall()
 
     return [NotificationResponse.model_validate(row) for row in rows]
+
+
+@router.patch("/{notification_id}", response_model=NotificationResponse)
+def mark_notification_as_read(notification_id: UUID) -> NotificationResponse:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE notifications
+                SET read = TRUE
+                WHERE id = %s
+                RETURNING id, user_id, list_id, message, read, created_at
+                """,
+                (str(notification_id),),
+            )
+            row = cursor.fetchone()
+        connection.commit()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return NotificationResponse.model_validate(row)

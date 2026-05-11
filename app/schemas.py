@@ -60,6 +60,10 @@ class ShareListResponse(BaseModel):
     role: Literal["owner", "editor", "viewer"]
 
 
+class MembershipActionResponse(BaseModel):
+    message: str
+
+
 class ListMemberResponse(BaseModel):
     user_id: UUID
     email: str

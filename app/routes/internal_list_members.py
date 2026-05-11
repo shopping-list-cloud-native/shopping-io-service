@@ -7,6 +7,7 @@ from app.db import get_connection
 from app.schemas import (
     ListMemberResponse,
     ListRecipientResponse,
+    MembershipActionResponse,
     ShareListRequest,
     ShareListResponse,
 )
@@ -156,3 +157,96 @@ def get_list_recipients(list_id: UUID = Path(...)) -> list[ListRecipientResponse
         )
 
     return [ListRecipientResponse.model_validate(row) for row in rows]
+
+
+@router.delete("/by-list/{list_id}/members/{user_id}", response_model=MembershipActionResponse)
+def remove_list_member(
+    list_id: UUID = Path(...),
+    user_id: UUID = Path(...),
+    owner_id: UUID = Query(...),
+) -> MembershipActionResponse:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id
+                FROM lists
+                WHERE id = %s AND owner_id = %s
+                """,
+                (str(list_id), str(owner_id)),
+            )
+            list_row = cursor.fetchone()
+
+            if list_row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="List not found",
+                )
+
+            cursor.execute(
+                """
+                DELETE FROM list_members
+                WHERE list_id = %s AND user_id = %s
+                RETURNING user_id
+                """,
+                (str(list_id), str(user_id)),
+            )
+            removed_row = cursor.fetchone()
+            connection.commit()
+
+    if removed_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="List member not found",
+        )
+
+    return MembershipActionResponse(message="Member removed from list")
+
+
+@router.delete("/by-list/{list_id}/leave", response_model=MembershipActionResponse)
+def leave_list(
+    list_id: UUID = Path(...),
+    requester_id: UUID = Query(...),
+) -> MembershipActionResponse:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT owner_id
+                FROM lists
+                WHERE id = %s
+                """,
+                (str(list_id),),
+            )
+            list_row = cursor.fetchone()
+
+            if list_row is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="List not found",
+                )
+
+            if str(list_row["owner_id"]) == str(requester_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Owner cannot leave their own list",
+                )
+
+            cursor.execute(
+                """
+                DELETE FROM list_members
+                WHERE list_id = %s AND user_id = %s
+                RETURNING user_id
+                """,
+                (str(list_id), str(requester_id)),
+            )
+            deleted_row = cursor.fetchone()
+            connection.commit()
+
+    if deleted_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of this list",
+        )
+
+    return MembershipActionResponse(message="You left the list")
