@@ -134,3 +134,39 @@ class NotificationResponse(BaseModel):
     message: str
     read: bool
     created_at: datetime
+
+
+class CreateCommentRequest(BaseModel):
+    list_id: UUID
+    user_id: UUID
+    content: str
+    x_percent: Decimal
+    y_percent: Decimal
+    width_percent: Decimal
+    height_percent: Decimal
+
+
+class UpdateCommentRequest(BaseModel):
+    content: str | None = None
+    x_percent: Decimal | None = None
+    y_percent: Decimal | None = None
+    width_percent: Decimal | None = None
+    height_percent: Decimal | None = None
+    user_id: UUID | None = None
+
+
+class CommentResponse(BaseModel):
+    id: UUID
+    list_id: UUID
+    user_id: UUID
+    content: str
+    x_percent: Decimal
+    y_percent: Decimal
+    width_percent: Decimal
+    height_percent: Decimal
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommentActionResponse(BaseModel):
+    message: str
